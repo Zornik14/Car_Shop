@@ -3,8 +3,8 @@
 const jwt = require('jsonwebtoken');
 
 // JWT secrets - in production these should be much longer and random
-const ACCESS_TOKEN_SECRET = process.env.JWT_ACCESS_SECRET || 'TODO';
-const REFRESH_TOKEN_SECRET = process.env.JWT_REFRESH_SECRET || 'TODO';
+const ACCESS_TOKEN_SECRET = process.env.JWT_ACCESS_SECRET;
+const REFRESH_TOKEN_SECRET = process.env.JWT_REFRESH_SECRET;
 
 // Token expiration times
 const ACCESS_TOKEN_EXPIRES = '15m'; // Short lived for security
