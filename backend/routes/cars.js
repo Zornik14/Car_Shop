@@ -76,42 +76,42 @@ router.get('/', optionalAuth, async (req, res) => {
 
     const offset = (page - 1) * limit;
     let whereConditions = 'WHERE 1=1'; // Always true condition to start
-    const queryParams = [];
+    const queryParams = {};
 
     // Build dynamic WHERE clause based on filters
     if (available === 'true') {
-      whereConditions += ' AND is_available = ?';
-      queryParams.push(1);
+      whereConditions += ' AND is_available = @available';
+      queryParams.available = 1;
     }
 
     if (make) {
-      whereConditions += ' AND make LIKE ?';
-      queryParams.push(`%${make}%`);
+      whereConditions += ' AND make LIKE @make';
+      queryParams.make = `%${make}%`;
     }
 
     if (model) {
-      whereConditions += ' AND model LIKE ?';
-      queryParams.push(`%${model}%`);
+      whereConditions += ' AND model LIKE @model';
+      queryParams.model = `%${model}%`;
     }
 
     if (minPrice) {
-      whereConditions += ' AND price >= ?';
-      queryParams.push(minPrice);
+      whereConditions += ' AND price >= @minPrice';
+      queryParams.minPrice = minPrice;
     }
 
     if (maxPrice) {
-      whereConditions += ' AND price <= ?';
-      queryParams.push(maxPrice);
+      whereConditions += ' AND price <= @maxPrice';
+      queryParams.maxPrice = maxPrice;
     }
 
     if (fuelType) {
-      whereConditions += ' AND fuel_type = ?';
-      queryParams.push(fuelType);
+      whereConditions += ' AND fuel_type = @fuelType';
+      queryParams.fuelType = fuelType;
     }
 
     if (transmission) {
-      whereConditions += ' AND transmission = ?';
-      queryParams.push(transmission);
+      whereConditions += ' AND transmission = @transmission';
+      queryParams.transmission = transmission;
     }
 
     // Get total count for pagination
@@ -124,9 +124,16 @@ router.get('/', optionalAuth, async (req, res) => {
       SELECT * FROM cars 
       ${whereConditions} 
       ORDER BY created_at DESC 
-      LIMIT ? OFFSET ?
+      OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY
     `;
-    const cars = await query(carsSQL, [...queryParams, parseInt(limit), offset]);
+    
+    const paginationParams = {
+      ...queryParams,
+      offset: parseInt(offset),
+      limit: parseInt(limit)
+    };
+    
+    const cars = await query(carsSQL, paginationParams);
 
     res.json({
       cars,
@@ -149,7 +156,7 @@ router.get('/:id', async (req, res) => {
   try {
     const { id } = req.params;
     
-    const cars = await query('SELECT * FROM cars WHERE id = ?', [id]);
+    const cars = await query('SELECT * FROM cars WHERE id = @id', { id });
     
     if (cars.length === 0) {
       return res.status(404).json({ message: 'Car not found' });
@@ -180,15 +187,21 @@ router.post('/', authenticateToken, requireAdmin, carValidationRules, handleVali
       is_available = true
     } = req.body;
 
-    // Insert new car
+    // Insert new car with OUTPUT clause for MSSQL
     const result = await query(
       `INSERT INTO cars (make, model, year, price, mileage, color, fuel_type, transmission, description, image_url, is_available) 
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [make, model, year, price, mileage, color, fuel_type, transmission, description, image_url, is_available]
+       OUTPUT INSERTED.id
+       VALUES (@make, @model, @year, @price, @mileage, @color, @fuel_type, @transmission, @description, @image_url, @is_available)`,
+      { 
+        make, model, year, price, mileage, color, fuel_type, transmission, 
+        description, image_url, is_available: is_available ? 1 : 0 
+      }
     );
 
+    const newCarId = result[0].id;
+    
     // Get the created car
-    const newCar = await query('SELECT * FROM cars WHERE id = ?', [result.insertId]);
+    const newCar = await query('SELECT * FROM cars WHERE id = @id', { id: newCarId });
 
     res.status(201).json({
       message: 'Car added successfully',
@@ -220,7 +233,7 @@ router.put('/:id', authenticateToken, requireAdmin, carValidationRules, handleVa
     } = req.body;
 
     // Check if car exists first
-    const existingCar = await query('SELECT id FROM cars WHERE id = ?', [id]);
+    const existingCar = await query('SELECT id FROM cars WHERE id = @id', { id });
     
     if (existingCar.length === 0) {
       return res.status(404).json({ message: 'Car not found' });
@@ -229,15 +242,19 @@ router.put('/:id', authenticateToken, requireAdmin, carValidationRules, handleVa
     // Update the car
     await query(
       `UPDATE cars SET 
-       make = ?, model = ?, year = ?, price = ?, mileage = ?, 
-       color = ?, fuel_type = ?, transmission = ?, description = ?, 
-       image_url = ?, is_available = ?, updated_at = CURRENT_TIMESTAMP
-       WHERE id = ?`,
-      [make, model, year, price, mileage, color, fuel_type, transmission, description, image_url, is_available, id]
+       make = @make, model = @model, year = @year, price = @price, mileage = @mileage, 
+       color = @color, fuel_type = @fuel_type, transmission = @transmission, 
+       description = @description, image_url = @image_url, is_available = @is_available, 
+       updated_at = GETDATE()
+       WHERE id = @id`,
+      { 
+        make, model, year, price, mileage, color, fuel_type, transmission, 
+        description, image_url, is_available: is_available ? 1 : 0, id 
+      }
     );
 
     // Get updated car
-    const updatedCar = await query('SELECT * FROM cars WHERE id = ?', [id]);
+    const updatedCar = await query('SELECT * FROM cars WHERE id = @id', { id });
 
     res.json({
       message: 'Car updated successfully',
@@ -256,14 +273,14 @@ router.delete('/:id', authenticateToken, requireAdmin, async (req, res) => {
     const { id } = req.params;
 
     // Check if car exists
-    const existingCar = await query('SELECT id FROM cars WHERE id = ?', [id]);
+    const existingCar = await query('SELECT id FROM cars WHERE id = @id', { id });
     
     if (existingCar.length === 0) {
       return res.status(404).json({ message: 'Car not found' });
     }
 
     // Delete the car
-    await query('DELETE FROM cars WHERE id = ?', [id]);
+    await query('DELETE FROM cars WHERE id = @id', { id });
 
     res.json({ message: 'Car deleted successfully' });
 
@@ -273,15 +290,15 @@ router.delete('/:id', authenticateToken, requireAdmin, async (req, res) => {
   }
 });
 
-// GET /api/cars/admin/statistics - Get car stats (admin only)
+// GET /api/cars/admin/stats - Get car statistics (admin only)
 router.get('/admin/stats', authenticateToken, requireAdmin, async (req, res) => {
   try {
     // Get overview statistics
     const overviewStats = await query(`
       SELECT 
         COUNT(*) as total_cars,
-        COUNT(CASE WHEN is_available = 1 THEN 1 END) as available_cars,
-        AVG(price) as average_price,
+        SUM(CASE WHEN is_available = 1 THEN 1 ELSE 0 END) as available_cars,
+        AVG(CAST(price AS FLOAT)) as average_price,
         MIN(price) as lowest_price,
         MAX(price) as highest_price
       FROM cars
@@ -292,8 +309,7 @@ router.get('/admin/stats', authenticateToken, requireAdmin, async (req, res) => 
       SELECT make, COUNT(*) as count 
       FROM cars 
       GROUP BY make 
-      ORDER BY count DESC 
-      LIMIT 10
+      ORDER BY count DESC
     `);
 
     res.json({

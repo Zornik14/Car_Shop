@@ -1,3 +1,5 @@
+// Handles user registration, login, token refresh, and logout
+
 const bcrypt = require('bcryptjs');
 const { query } = require('../config/database');
 const { generateTokens, verifyRefreshToken } = require('../config/jwt');
@@ -15,10 +17,10 @@ const registerUser = async (req, res) => {
       return res.status(400).json({ message: 'All fields are required' });
     }
 
-    // Check if user already exists
+    // Check if user already exists - MSSQL syntax
     const existingUsers = await query(
-      'SELECT id FROM users WHERE username = ? OR email = ?',
-      [username, email]
+      'SELECT id FROM users WHERE username = @username OR email = @email',
+      { username, email }
     );
 
     if (existingUsers.length > 0) {
@@ -29,13 +31,13 @@ const registerUser = async (req, res) => {
     const saltRounds = 12; // Higher number = more secure but slower
     const hashedPassword = await bcrypt.hash(password, saltRounds);
 
-    // Insert new user into database
+    // Insert new user into database - MSSQL syntax with OUTPUT clause
     const insertResult = await query(
-      'INSERT INTO users (username, email, password, role) VALUES (?, ?, ?, ?)',
-      [username, email, hashedPassword, role]
+      'INSERT INTO users (username, email, password, role) OUTPUT INSERTED.id VALUES (@username, @email, @password, @role)',
+      { username, email, password: hashedPassword, role }
     );
 
-    const newUserId = insertResult.insertId;
+    const newUserId = insertResult[0].id; // MSSQL returns array with OUTPUT
 
     // Generate tokens for immediate login after registration
     const tokenPayload = { 
@@ -52,7 +54,7 @@ const registerUser = async (req, res) => {
     // Set refresh token as secure cookie
     res.cookie('refreshToken', tokens.refreshToken, {
       httpOnly: true,
-      secure: true, // HTTPS only
+      secure: false, // Set to false for HTTP, true for HTTPS
       sameSite: 'strict',
       maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days in milliseconds
     });
@@ -78,10 +80,10 @@ const loginUser = async (req, res) => {
       return res.status(400).json({ message: 'Username and password required' });
     }
 
-    // Find user by username or email
+    // Find user by username or email - MSSQL syntax
     const users = await query(
-      'SELECT * FROM users WHERE username = ? OR email = ?',
-      [username, username]
+      'SELECT * FROM users WHERE username = @username OR email = @username',
+      { username }
     );
 
     if (users.length === 0) {
@@ -112,7 +114,7 @@ const loginUser = async (req, res) => {
     // Set refresh token cookie
     res.cookie('refreshToken', tokens.refreshToken, {
       httpOnly: true,
-      secure: true,
+      secure: false, // Set to false for HTTP, true for HTTPS
       sameSite: 'strict',
       maxAge: 7 * 24 * 60 * 60 * 1000
     });
@@ -167,7 +169,7 @@ const refreshAccessToken = async (req, res) => {
       // Update cookie
       res.cookie('refreshToken', newTokens.refreshToken, {
         httpOnly: true,
-        secure: true,
+        secure: false, // Set to false for HTTP, true for HTTPS
         sameSite: 'strict',
         maxAge: 7 * 24 * 60 * 60 * 1000
       });

@@ -1,0 +1,7 @@
+$headers = @{'Content-Type' = 'application/json' }
+$body = '{"username":"admin","password":"admin123"}'
+Invoke-RestMethod -Uri "https://localhost:5000/api/auth/login" -Method Post -Body $body -Headers $headers -SkipCertificateCheck
+
+$body = '{"username":"newuser","email":"new@test.com","password":"Test123!","role":"customer"}'
+$headers = @{'Content-Type' = 'application/json' }
+Invoke-RestMethod -Uri "https://localhost:5000/api/auth/register" -Method Post -Body $body -Headers $headers -SkipCertificateCheck

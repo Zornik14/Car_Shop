@@ -1,35 +1,31 @@
-// Using connection pool for better performance
-
 const sql = require('mssql');
 
-// MSSQL connection configuration
+// MSSQL connection configuration using SQL Server Authentication
 const dbConfig = {
     user: process.env.DB_USER,
     password: process.env.DB_PASSWORD,
     server: process.env.DB_HOST,
     database: process.env.DB_NAME,
     options: {
-        encrypt: false, // Set to true if using Azure
-        trustServerCertificate: true // For development with self-signed certificates
+        encrypt: false,
+        trustServerCertificate: true,
+        enableArithAbort: true
     },
     pool: {
         max: 10,
         min: 0,
         idleTimeoutMillis: 60000
-    }
+    },
+    connectionTimeout: 60000,
+    requestTimeout: 60000
 };
 
 // Create connection pool
 const dbPool = new sql.ConnectionPool(dbConfig);
 
 // Connect to database when the app starts
-dbPool.connect().then(pool => {
-    if (pool.connecting) {
-        console.log('Connecting to MSSQL database...');
-    }
-    if (pool.connected) {
-        console.log('Database connected successfully');
-    }
+dbPool.connect().then(() => {
+    console.log('Database connected successfully');
 }).catch(error => {
     console.error('Database connection failed:', error.message);
     process.exit(1);
@@ -41,7 +37,6 @@ dbPool.on('error', error => {
 });
 
 // Helper function to execute queries with promises
-// This makes it easier to use async/await instead of callbacks
 const executeQuery = async (sqlQuery, params = {}) => {
     try {
         const pool = await dbPool;
@@ -53,31 +48,11 @@ const executeQuery = async (sqlQuery, params = {}) => {
         });
         
         const result = await request.query(sqlQuery);
-        return result.recordset;
+        return result.recordset || [];
     } catch (error) {
-        console.error('Database query error:', error);
-        throw error;
-    }
-};
-
-// Helper function for prepared statements (prevents SQL injection)
-const executePreparedQuery = async (sqlQuery, inputs = {}, params = {}) => {
-    try {
-        const pool = await dbPool;
-        const ps = new sql.PreparedStatement(pool);
-        
-        // Define input parameters
-        Object.keys(inputs).forEach(key => {
-            ps.input(key, inputs[key]);
-        });
-        
-        await ps.prepare(sqlQuery);
-        const result = await ps.execute(params);
-        await ps.unprepare();
-        
-        return result.recordset;
-    } catch (error) {
-        console.error('Prepared query error:', error);
+        console.error('Database query error:', error.message);
+        console.error('Query:', sqlQuery);
+        console.error('Params:', params);
         throw error;
     }
 };
@@ -85,6 +60,5 @@ const executePreparedQuery = async (sqlQuery, inputs = {}, params = {}) => {
 module.exports = { 
     pool: dbPool, 
     query: executeQuery,
-    preparedQuery: executePreparedQuery,
-    sql // Export sql types for parameter definitions
+    sql
 };
