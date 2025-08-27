@@ -1,7 +1,7 @@
 {
   "name": "car-shop-api",
   "version": "1.0.0",
-  "description": "Final exam project - Car hop backend with JWT auth",
+  "description": "Final exam project - Car shop backend with JWT auth",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
