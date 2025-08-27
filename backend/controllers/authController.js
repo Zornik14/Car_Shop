@@ -17,7 +17,7 @@ const registerUser = async (req, res) => {
       return res.status(400).json({ message: 'All fields are required' });
     }
 
-    // Check if user already exists - MSSQL syntax
+    // Check if user already exists
     const existingUsers = await query(
       'SELECT id FROM users WHERE username = @username OR email = @email',
       { username, email }
@@ -31,13 +31,13 @@ const registerUser = async (req, res) => {
     const saltRounds = 12; // Higher number = more secure but slower
     const hashedPassword = await bcrypt.hash(password, saltRounds);
 
-    // Insert new user into database - MSSQL syntax with OUTPUT clause
+    // Insert new user into database with OUTPUT clause
     const insertResult = await query(
       'INSERT INTO users (username, email, password, role) OUTPUT INSERTED.id VALUES (@username, @email, @password, @role)',
       { username, email, password: hashedPassword, role }
     );
 
-    const newUserId = insertResult[0].id; // MSSQL returns array with OUTPUT
+    const newUserId = insertResult[0].id; // returns array with OUTPUT
 
     // Generate tokens for immediate login after registration
     const tokenPayload = { 
@@ -54,7 +54,7 @@ const registerUser = async (req, res) => {
     // Set refresh token as secure cookie
     res.cookie('refreshToken', tokens.refreshToken, {
       httpOnly: true,
-      secure: false, // Set to false for HTTP, true for HTTPS
+      secure: true,
       sameSite: 'strict',
       maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days in milliseconds
     });
@@ -80,7 +80,7 @@ const loginUser = async (req, res) => {
       return res.status(400).json({ message: 'Username and password required' });
     }
 
-    // Find user by username or email - MSSQL syntax
+    // Find user by username or email
     const users = await query(
       'SELECT * FROM users WHERE username = @username OR email = @username',
       { username }
